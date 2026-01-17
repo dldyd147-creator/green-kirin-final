@@ -50,9 +50,10 @@ export default function HomePage() {
   };
 
   return (
+    // ⚠️ relative 클래스가 있어야 안에 있는 버튼이 이 박스를 기준으로 자리를 잡습니다.
     <div className="min-h-screen bg-white text-gray-900 px-4 pt-10 pb-20 max-w-3xl mx-auto relative">
       
-      {/* 1️⃣ 로고 영역 (대문자로 수정됨) */}
+      {/* 1️⃣ 로고 영역 */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-extrabold tracking-tight text-[#00D560] cursor-pointer uppercase" onClick={() => { setIsSearching(false); setKeyword(""); }}>
           GREENKIRIN
@@ -144,10 +145,11 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ⚙️ 관리자 버튼 (무조건 보이게 설정) */}
+      {/* ⚙️ 관리자 버튼 (위치 수정됨: absolute) */}
+      {/* 이제 흰색 박스(max-w-3xl)의 오른쪽 아래 구석에 붙습니다. */}
       <Link 
         href="/admin" 
-        className="fixed bottom-10 right-6 bg-[#00D560] text-white px-4 py-3 rounded-full shadow-2xl z-[9999] flex items-center gap-2 font-bold hover:scale-110 transition-transform border-2 border-white"
+        className="absolute bottom-4 right-4 bg-[#00D560] text-white px-4 py-3 rounded-full shadow-lg z-50 flex items-center gap-2 font-bold hover:scale-105 transition-transform"
       >
         <span>⚙️ 관리자</span>
       </Link>
