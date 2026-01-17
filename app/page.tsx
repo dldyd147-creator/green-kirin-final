@@ -23,13 +23,11 @@ export default function HomePage() {
   // 2. 검색 기능
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault(); 
-
     if (!keyword.trim()) {
       setIsSearching(false);
       setResults([]);
       return;
     }
-
     setIsSearching(true);
     setDebugMsg("검색 중...");
 
@@ -40,10 +38,7 @@ export default function HomePage() {
         .ilike("tags", `%${keyword}%`) 
         .order("id", { ascending: false });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       if (data) {
         setResults(data);
         setDebugMsg(data.length === 0 ? "검색 결과가 없습니다." : "");
@@ -57,10 +52,10 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white text-gray-900 px-4 pt-10 pb-20 max-w-3xl mx-auto relative">
       
-      {/* 1️⃣ 로고 영역 */}
+      {/* 1️⃣ 로고 영역 (대문자로 수정됨) */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold tracking-tight text-[#00D560] cursor-pointer" onClick={() => { setIsSearching(false); setKeyword(""); }}>
-          GreenKirin
+        <h1 className="text-4xl font-extrabold tracking-tight text-[#00D560] cursor-pointer uppercase" onClick={() => { setIsSearching(false); setKeyword(""); }}>
+          GREENKIRIN
         </h1>
         <p className="text-gray-400 text-xs mt-2">Webtoon Asset Archive</p>
       </div>
@@ -94,7 +89,6 @@ export default function HomePage() {
           <h2 className="text-sm font-bold text-gray-500 mb-2 ml-1">
             '<span className="text-[#00D560]">{keyword}</span>' 검색 결과 ({results.length})
           </h2>
-          
           {results.length > 0 ? (
             results.map((ep) => (
               <Link key={ep.id} href={`/viewer/${ep.id}`}>
@@ -127,13 +121,9 @@ export default function HomePage() {
               </Link>
             ))
           ) : (
-             <div className="text-center py-20 text-gray-400">
-               검색된 컷이 없습니다.<br/>
-               <span className="text-xs">태그가 정확한지 확인해주세요.</span>
-             </div>
+             <div className="text-center py-20 text-gray-400">검색된 컷이 없습니다.<br/><span className="text-xs">태그가 정확한지 확인해주세요.</span></div>
           )}
         </div>
-
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {works.map((work) => (
@@ -154,14 +144,13 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ⚙️ 관리자 버튼 (무조건 보이게 수정된 버전) */}
+      {/* ⚙️ 관리자 버튼 (무조건 보이게 설정) */}
       <Link 
         href="/admin" 
         className="fixed bottom-10 right-6 bg-[#00D560] text-white px-4 py-3 rounded-full shadow-2xl z-[9999] flex items-center gap-2 font-bold hover:scale-110 transition-transform border-2 border-white"
       >
         <span>⚙️ 관리자</span>
       </Link>
-
     </div>
   );
 }
