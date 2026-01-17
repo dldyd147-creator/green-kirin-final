@@ -1,24 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = {
-  title: "GreenKirin Webtoon Viewer",
-  description: "Internal Test Only",
-  // 👇 이 부분이 '검색 금지' 설정입니다.
+// ⚠️ 핵심: 검색 엔진이 이 사이트를 긁어가지 못하게 막는 설정
+export const metadata: Metadata = {
+  title: "GreenKirin Webtoon Archive",
+  description: "Internal Asset Library",
   robots: {
-    index: false,
-    follow: false,
+    index: false,  // "검색 결과에 올리지 마!"
+    follow: false, // "이 안의 링크도 따라가지 마!"
   },
 };
 
@@ -28,10 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="ko">
+      <body>
         {children}
       </body>
     </html>
