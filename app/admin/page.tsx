@@ -5,36 +5,26 @@ import { supabase } from "@/utils/supabase";
 import Link from "next/link";
 
 export default function AdminPage() {
-  // 탭 상태 (works: 작품관리, episodes: 에피소드업로드)
   const [activeTab, setActiveTab] = useState<"works" | "episodes">("works");
 
-  // ==============================
-  // 1️⃣ 작품 관리 (Works) 관련 상태
-  // ==============================
+  // === 작품 관리 상태 ===
   const [workTitle, setWorkTitle] = useState("");
   const [workThumbnail, setWorkThumbnail] = useState<File | null>(null);
   const [workList, setWorkList] = useState<any[]>([]);
   const [isRegisteringWork, setIsRegisteringWork] = useState(false);
 
-  // ==============================
-  // 2️⃣ 에피소드 (Episodes) 관련 상태
-  // ==============================
+  // === 컷 업로드 상태 ===
   const [selectedWorkId, setSelectedWorkId] = useState<string>("");
   const [episodeNumber, setEpisodeNumber] = useState("");
-  const [episodeFiles, setEpisodeFiles] = useState<FileList | null>(null);
-  const [epTitle, setEpTitle] = useState(""); // 공통 제목
   const [epTags, setEpTags] = useState("");
-  const [isUploadingEp, setIsUploadingEp] = useState(false);
-  const [episodeList, setEpisodeList] = useState<any[]>([]); // 일괄 삭제용 리스트
-  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<Set<string>>(new Set());
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [episodeList, setEpisodeList] = useState<any[]>([]);
 
-
-  // 초기 로딩: 작품 목록 가져오기
   useEffect(() => {
     fetchWorks();
   }, []);
 
-  // 작품 선택 변경 시 에피소드 목록 가져오기
   useEffect(() => {
     if (selectedWorkId) {
       fetchEpisodes();
@@ -43,8 +33,6 @@ export default function AdminPage() {
     }
   }, [selectedWorkId]);
 
-
-  // 🔄 데이터 가져오기 함수들
   const fetchWorks = async () => {
     const { data } = await supabase.from("works").select("*").order("id", { ascending: true });
     if (data) setWorkList(data);
@@ -58,104 +46,77 @@ export default function AdminPage() {
       .eq("work_id", selectedWorkId)
       .order("id", { ascending: false });
     if (data) setEpisodeList(data);
-    setSelectedEpisodeIds(new Set());
   };
 
-
-  // ✨ [기능 1] 작품 등록하기 (썸네일 없어도 됨!)
+  // [기능 1] 작품 등록
   const handleRegisterWork = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workTitle.trim()) {
-      alert("작품 제목을 입력해주세요!");
-      return;
-    }
-
-    if (!confirm(`'${workTitle}' 작품을 등록하시겠습니까?`)) return;
-
+    if (!workTitle.trim()) return alert("제목을 입력하세요.");
+    
     setIsRegisteringWork(true);
 
     try {
       let thumbnailUrl = null;
-
-      // 1. 썸네일 파일이 "있을 때만" 업로드
       if (workThumbnail) {
-        const fileName = `thumb_${Date.now()}_${workThumbnail.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("webtoon-images")
-          .upload(fileName, workThumbnail);
-
-        if (uploadError) throw uploadError;
-
-        thumbnailUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/webtoon-images/${fileName}`;
+        const fileExt = workThumbnail.name.split('.').pop();
+        const fileName = `thumb_${Date.now()}.${fileExt}`;
+        
+        // 🚨 수정됨: webtoon-images -> webtoons
+        const { error } = await supabase.storage.from("webtoons").upload(fileName, workThumbnail);
+        if (error) throw error;
+        
+        // 🚨 수정됨: URL 주소도 webtoons로 변경
+        thumbnailUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/webtoons/${fileName}`;
       }
 
-      // 2. DB에 저장 (이미지 없으면 null로 저장)
-      const { error: dbError } = await supabase.from("works").insert([
-        {
-          title: workTitle,
-          thumbnail_url: thumbnailUrl, // 없으면 null 들어감
-        },
-      ]);
+      const { error } = await supabase.from("works").insert([{ title: workTitle, thumbnail_url: thumbnailUrl }]);
+      if (error) throw error;
 
-      if (dbError) throw dbError;
-
-      alert("작품이 등록되었습니다! 🎉");
+      alert("작품 등록 완료!");
       setWorkTitle("");
       setWorkThumbnail(null);
-      // 파일 인풋 초기화
-      const fileInput = document.getElementById("workThumbInput") as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
-      
-      fetchWorks(); // 목록 새로고침
-
-    } catch (error: any) {
-      console.error(error);
-      alert(`등록 실패: ${error.message}`);
+      fetchWorks();
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
     } finally {
       setIsRegisteringWork(false);
     }
   };
 
-  // 🗑️ 작품 삭제하기
   const handleDeleteWork = async (id: number) => {
-    if (!confirm("정말 삭제하시겠습니까? (이 작품에 속한 에피소드도 모두 삭제될 수 있습니다)")) return;
-    
-    const { error } = await supabase.from("works").delete().eq("id", id);
-    if (error) {
-      alert("삭제 실패: " + error.message);
-    } else {
-      alert("삭제되었습니다.");
-      fetchWorks();
-    }
+    if (!confirm("작품을 삭제하시겠습니까?")) return;
+    await supabase.from("works").delete().eq("id", id);
+    fetchWorks();
   };
 
-
-  // ✨ [기능 2] 에피소드 대량 업로드
-  const handleUploadEpisode = async (e: React.FormEvent) => {
+  // [기능 2] 컷 일괄 업로드
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!episodeFiles || episodeFiles.length === 0 || !selectedWorkId || !episodeNumber) {
+    if (!files || files.length === 0 || !selectedWorkId || !episodeNumber) {
       alert("작품, 화수, 파일을 모두 선택해주세요.");
       return;
     }
 
-    setIsUploadingEp(true);
+    setIsUploading(true);
 
     try {
-      const uploadPromises = Array.from(episodeFiles).map(async (file, index) => {
-        const fileName = `${Date.now()}_${index}_${file.name}`;
+      const uploadPromises = Array.from(files).map(async (file, index) => {
+        const fileExt = file.name.split('.').pop();
+        const safeFileName = `${Date.now()}_${index}.${fileExt}`;
         
-        const { error: fileError } = await supabase.storage
-          .from("webtoon-images")
-          .upload(fileName, file);
+        // 🚨 수정됨: webtoon-images -> webtoons (여기가 핵심!)
+        const { error: storageError } = await supabase.storage
+          .from("webtoons")
+          .upload(safeFileName, file);
+        
+        if (storageError) throw storageError;
 
-        if (fileError) throw fileError;
-
-        const imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/webtoon-images/${fileName}`;
-        const finalTitle = epTitle ? `${epTitle} (${index + 1})` : file.name;
+        // 🚨 수정됨: URL 경로도 webtoons로 변경
+        const imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/webtoons/${safeFileName}`;
 
         return supabase.from("episodes").insert([{
           work_id: parseInt(selectedWorkId),
-          title: finalTitle,
+          title: file.name,
           episode_number: parseInt(episodeNumber),
           image_url: imageUrl,
           tags: epTags,
@@ -163,246 +124,150 @@ export default function AdminPage() {
       });
 
       await Promise.all(uploadPromises);
-      alert(`${episodeFiles.length}장 업로드 완료!`);
-      
-      setEpTitle("");
-      setEpisodeFiles(null);
-      const epInput = document.getElementById("epFileInput") as HTMLInputElement;
-      if (epInput) epInput.value = "";
+
+      alert(`${files.length}장 업로드 성공! 🎉`);
+      setFiles(null);
+      const fileInput = document.getElementById("fileInput") as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
       
       fetchEpisodes();
 
     } catch (error: any) {
-      alert(`업로드 중 오류: ${error.message}`);
+      console.error(error);
+      alert(`업로드 실패: ${error.message}`);
     } finally {
-      setIsUploadingEp(false);
+      setIsUploading(false);
     }
   };
 
-  // 🗑️ 에피소드 일괄 삭제
-  const handleBulkDeleteEpisodes = async () => {
-    if (selectedEpisodeIds.size === 0) return;
-    if (!confirm(`${selectedEpisodeIds.size}개를 삭제하시겠습니까?`)) return;
-
-    const { error } = await supabase.from("episodes").delete().in("id", Array.from(selectedEpisodeIds));
-    if (error) alert("삭제 실패");
-    else {
-      alert("삭제 완료");
-      fetchEpisodes();
-    }
+  const handleDeleteEpisode = async (id: number) => {
+    if (!confirm("이 컷을 삭제하시겠습니까?")) return;
+    await supabase.from("episodes").delete().eq("id", id);
+    fetchEpisodes();
   };
-
-  const toggleEpSelect = (id: string) => {
-    const newSet = new Set(selectedEpisodeIds);
-    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
-    setSelectedEpisodeIds(newSet);
-  };
-
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-      {/* 상단 헤더 */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div className="min-h-screen bg-gray-50 text-gray-900 pb-20 font-sans">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold text-[#00D560]">ADMIN <span className="text-gray-300 font-light text-sm ml-2">관리자 페이지</span></h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold text-[#00D560]">ADMIN</h1>
+          </div>
           <Link href="/" className="text-sm font-bold text-gray-500 hover:text-[#00D560] transition-colors">
             🏠 뷰어로 나가기
           </Link>
         </div>
-        
-        {/* 탭 메뉴 */}
-        <div className="max-w-5xl mx-auto px-6 flex gap-8">
-          <button 
-            onClick={() => setActiveTab("works")}
-            className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === "works" ? "border-[#00D560] text-[#00D560]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
-          >
-            1. 작품 관리
-          </button>
-          <button 
-            onClick={() => setActiveTab("episodes")}
-            className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === "episodes" ? "border-[#00D560] text-[#00D560]" : "border-transparent text-gray-400 hover:text-gray-600"}`}
-          >
-            2. 에피소드 업로드
-          </button>
+        <div className="max-w-5xl mx-auto px-6 flex gap-6 mt-1">
+          <button onClick={() => setActiveTab("works")} className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === "works" ? "border-[#00D560] text-[#00D560]" : "border-transparent text-gray-400"}`}>1. 작품 관리</button>
+          <button onClick={() => setActiveTab("episodes")} className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === "episodes" ? "border-[#00D560] text-[#00D560]" : "border-transparent text-gray-400"}`}>2. 컷(원고) 업로드</button>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-6">
-        
-        {/* =======================
-            TAB 1: 작품 관리 화면
-           ======================= */}
         {activeTab === "works" && (
-          <div className="space-y-8 animate-fade-in">
-            {/* 등록 폼 */}
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-                ✨ 새 작품 등록 
-                <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-1 rounded">썸네일 없어도 됨</span>
-              </h2>
-              <form onSubmit={handleRegisterWork} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">작품 제목 <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
-                    placeholder="예: 나 혼자만 레벨업" 
-                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-[#00D560] outline-none transition-all font-bold"
-                    value={workTitle}
-                    onChange={(e) => setWorkTitle(e.target.value)}
-                  />
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h2 className="text-lg font-bold mb-4">✨ 작품 등록</h2>
+              <form onSubmit={handleRegisterWork} className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 mb-1">제목</label>
+                  <input type="text" className="w-full p-3 border rounded-xl" value={workTitle} onChange={(e) => setWorkTitle(e.target.value)} placeholder="작품명" />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">썸네일 이미지 (선택사항)</label>
-                  <input 
-                    id="workThumbInput"
-                    type="file" 
-                    accept="image/*"
-                    className="w-full p-3 border border-gray-200 rounded-xl text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
-                    onChange={(e) => setWorkThumbnail(e.target.files?.[0] || null)}
-                  />
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 mb-1">썸네일 (선택)</label>
+                  <input type="file" className="w-full p-2 border rounded-xl bg-gray-50 text-sm" onChange={(e) => setWorkThumbnail(e.target.files?.[0] || null)} />
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={isRegisteringWork}
-                  className="w-full bg-[#00D560] text-white font-bold py-4 rounded-xl hover:bg-[#00b550] transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
-                >
-                  {isRegisteringWork ? "등록 중..." : "작품 등록하기"}
+                <button type="submit" disabled={isRegisteringWork} className={`px-6 py-3 rounded-xl font-bold text-white transition-all ${isRegisteringWork ? "bg-gray-400" : "bg-[#00D560] hover:bg-[#00b550]"}`}>
+                  {isRegisteringWork ? "등록 중..." : "등록"}
                 </button>
               </form>
             </div>
-
-            {/* 등록된 작품 리스트 */}
-            <div>
-              <h3 className="text-sm font-bold text-gray-500 mb-3">등록된 작품 목록 ({workList.length})</h3>
-              <div className="grid gap-3">
-                {workList.map((work) => (
-                  <div key={work.id} className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                    <div className="w-16 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100">
-                      {work.thumbnail_url ? (
-                        <img src={work.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 bg-gray-50">No Image</div>
-                      )}
+            <div className="grid gap-3">
+              {workList.map((work) => (
+                <div key={work.id} className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden border border-gray-100">
+                      {work.thumbnail_url ? <img src={work.thumbnail_url} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center w-full h-full text-xs text-gray-300">No Img</div>}
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-lg">{work.title}</h4>
-                      <p className="text-xs text-gray-400">ID: {work.id} • 등록일: {work.created_at?.split('T')[0]}</p>
-                    </div>
-                    <button 
-                      onClick={() => handleDeleteWork(work.id)}
-                      className="px-4 py-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-bold transition-colors"
-                    >
-                      삭제
-                    </button>
+                    <span className="font-bold text-lg">{work.title}</span>
                   </div>
-                ))}
-                {workList.length === 0 && <div className="text-center py-10 text-gray-400">등록된 작품이 없습니다.</div>}
-              </div>
+                  <button onClick={() => handleDeleteWork(work.id)} className="text-red-500 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg text-sm font-bold transition-colors">삭제</button>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-
-        {/* =======================
-            TAB 2: 에피소드 업로드
-           ======================= */}
         {activeTab === "episodes" && (
-          <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
-            {/* 왼쪽: 업로드 폼 */}
+          <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h2 className="text-lg font-bold mb-4">📤 컷(원고) 업로드</h2>
-                <form onSubmit={handleUploadEpisode} className="space-y-4">
+                <h2 className="text-lg font-bold mb-4">📤 컷 업로드</h2>
+                <form onSubmit={handleUpload} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">어떤 작품인가요?</label>
-                    <select 
-                      className="w-full p-3 border border-gray-200 rounded-xl focus:border-[#00D560] outline-none font-bold"
-                      value={selectedWorkId}
-                      onChange={(e) => setSelectedWorkId(e.target.value)}
-                    >
+                    <select className="w-full p-3 border border-gray-200 rounded-xl font-bold outline-none focus:border-[#00D560]" value={selectedWorkId} onChange={(e) => setSelectedWorkId(e.target.value)}>
                       <option value="">작품 선택</option>
                       {workList.map((w) => <option key={w.id} value={w.id}>{w.title}</option>)}
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1">화수 (숫자)</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-3 border border-gray-200 rounded-xl focus:border-[#00D560] outline-none"
-                        placeholder="예: 3"
-                        value={episodeNumber}
-                        onChange={(e) => setEpisodeNumber(e.target.value)}
-                      />
+                      <input type="number" className="w-full p-3 border rounded-xl" value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} placeholder="예: 1" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 mb-1">태그</label>
-                      <input 
-                        type="text" 
-                        className="w-full p-3 border border-gray-200 rounded-xl focus:border-[#00D560] outline-none"
-                        placeholder="액션, 로맨스..."
-                        value={epTags}
-                        onChange={(e) => setEpTags(e.target.value)}
-                      />
+                      <input type="text" className="w-full p-3 border rounded-xl" value={epTags} onChange={(e) => setEpTags(e.target.value)} placeholder="태그 입력" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">파일 선택 (여러장 드래그 가능)</label>
-                    <input 
-                      id="epFileInput"
-                      type="file" 
-                      multiple 
-                      accept="image/*"
-                      className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 text-sm"
-                      onChange={(e) => setEpisodeFiles(e.target.files)}
-                    />
+                    <label className="block text-xs font-bold text-gray-500 mb-1">파일 (드래그 가능)</label>
+                    <input id="fileInput" type="file" multiple accept="image/*" className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50" onChange={(e) => setFiles(e.target.files)} />
+                    <p className="text-xs text-gray-400 mt-1">* 50장, 100장 한 번에 선택 가능합니다.</p>
                   </div>
                   <button 
                     type="submit" 
-                    disabled={isUploadingEp}
-                    className="w-full bg-[#00D560] text-white font-bold py-3 rounded-xl hover:bg-[#00b550] shadow-md transition-all"
+                    disabled={isUploading} 
+                    className={`w-full py-4 rounded-xl font-bold text-white shadow-md transition-all ${
+                      isUploading ? "bg-gray-400 cursor-not-allowed" : "bg-[#00D560] hover:bg-[#00b550] hover:shadow-lg"
+                    }`}
                   >
-                    {isUploadingEp ? "업로드 중..." : "업로드 하기"}
+                    {isUploading ? "업로드 중입니다... (기다려주세요) ⏳" : "업로드 하기 ✨"}
                   </button>
                 </form>
               </div>
             </div>
 
-            {/* 오른쪽: 삭제 관리 */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[600px]">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold">🗑️ 등록된 컷 관리</h2>
-                {selectedEpisodeIds.size > 0 && (
-                  <button onClick={handleBulkDeleteEpisodes} className="bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-bold">
-                    {selectedEpisodeIds.size}개 삭제
-                  </button>
-                )}
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                {episodeList.length > 0 ? (
-                  episodeList.map((ep) => (
-                    <div 
-                      key={ep.id} 
-                      onClick={() => toggleEpSelect(ep.id)}
-                      className={`flex gap-3 p-2 rounded-lg border cursor-pointer ${selectedEpisodeIds.has(ep.id) ? "border-red-500 bg-red-50" : "border-gray-100 hover:border-green-400"}`}
-                    >
-                      <div className="w-12 h-12 bg-gray-200 rounded overflow-hidden flex-shrink-0">
-                        <img src={ep.image_url} className="w-full h-full object-cover" />
+              <h2 className="text-lg font-bold mb-4">📑 등록된 컷 관리</h2>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                {selectedWorkId ? (
+                  episodeList.length > 0 ? (
+                    episodeList.map((ep) => (
+                      <div key={ep.id} className="flex gap-3 p-3 rounded-lg border border-gray-100 hover:border-[#00D560] bg-white group transition-all">
+                        <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-100">
+                          {ep.image_url ? <img src={ep.image_url} className="w-full h-full object-cover" /> : <div className="text-[10px] text-gray-300 flex items-center justify-center h-full">No Img</div>}
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                          <div className="text-sm font-bold truncate text-gray-800">{ep.title}</div>
+                          <div className="text-xs text-gray-400">{ep.episode_number}화 · {ep.tags || "태그없음"}</div>
+                        </div>
+                        <button onClick={() => handleDeleteEpisode(ep.id)} className="opacity-0 group-hover:opacity-100 text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-lg text-xs font-bold transition-all">
+                          삭제
+                        </button>
                       </div>
-                      <div className="overflow-hidden">
-                        <div className="text-sm font-bold truncate">{ep.title}</div>
-                        <div className="text-xs text-gray-400">{ep.episode_number}화</div>
-                      </div>
-                    </div>
-                  ))
+                    ))
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-gray-400 text-sm">등록된 컷이 없습니다.</div>
+                  )
                 ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400 text-sm">작품을 선택하면 목록이 나옵니다.</div>
+                  <div className="h-full flex items-center justify-center text-gray-400 text-sm">왼쪽에서 작품을 선택해주세요.</div>
                 )}
               </div>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
